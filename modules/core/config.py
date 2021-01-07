@@ -13,8 +13,14 @@ class Config():
         self.cfg_path = cfg_path
         self.default_cfg_path = default_cfg_path
         self.save = True
+        
+        self.ignored = ["description"] #any item, will not be carried outside the default_cfg
         if(default_cfg_path):
-            self.cfg_default = json.load(open(self.default_cfg_path,"r"))
+            try:
+                self.cfg_default = json.load(open(self.default_cfg_path,"r"))
+            except Exception as e:
+                traceback.print_exc()
+                raise Exception("{} for '{}'".format(e, self.cfg_path))
        
         if(cfg_path):
             self.load()
@@ -22,25 +28,42 @@ class Config():
     def load(self):
         self.cfg = self.json_load()
     
+    def remove_ignored(self, tdic):
+        dic = tdic.copy()
+        remove_keys = []
+        for key in dic.keys():
+            for i in self.ignored:
+                if(i in key):
+                    remove_keys.append(key)
+        for key in remove_keys:
+            del dic[key]
+        return dic
+    
     def json_load(self):
-        cfg = None
-        if(os.path.isfile(self.cfg_path)):
-            cfg_t = json.load(open(self.cfg_path,"r"))
-            if(self.default_cfg_path):
-                cfg = self.cfg_default.copy()
-                cfg.update(cfg_t)
-                with open(self.cfg_path, 'w') as outfile:
-                    json.dump(cfg, outfile, indent=4, separators=(',', ': '), default=serialize)  
+        try:
+            cfg = None
+            if(os.path.isfile(self.cfg_path)):
+                cfg_t = json.load(open(self.cfg_path,"r"))
+                if(self.default_cfg_path):
+                    cfg = self.cfg_default.copy()
+                    cfg.update(cfg_t)
+                    #TODO: remove description etc
+                    with open(self.cfg_path, 'w') as outfile:
+                        json.dump(self.remove_ignored(cfg), outfile, indent=4, separators=(',', ': '), default=serialize)  
+                else:
+                    cfg = cfg_t
             else:
-                cfg = cfg_t
-        else:
-            if(self.default_cfg_path):
-                with open(self.cfg_path, 'w') as outfile:
-                    json.dump(self.cfg_default, outfile, indent=4, separators=(',', ': '), default=serialize)
-                cfg = self.cfg_default
-        if(cfg == None):
-            return {}
-        return cfg
+                if(self.default_cfg_path):
+                    with open(self.cfg_path, 'w') as outfile:
+                        #TODO: remove description etc
+                        json.dump(self.remove_ignored(self.cfg_default), outfile, indent=4, separators=(',', ': '), default=serialize)
+                    cfg = self.cfg_default
+            if(cfg == None):
+                return {}
+            return cfg
+        except Exception as e:
+            traceback.print_exc()
+            raise Exception("{} for '{}'".format(e, self.cfg_path))
         
     def json_save(self):
         if(self.cfg_path):
@@ -53,7 +76,7 @@ class Config():
             json.dump(self.cfg, outfile, indent=4, separators=(',', ': '), default=serialize)
             
     # deletes config files      
-    def delete():
+    def delete(self):
         if(self.cfg_path):
             os.remove(self.cfg_path)
         if(self.default_cfg_path):
@@ -109,8 +132,8 @@ class Config():
 
     # return a new config handler
     def new(self, cfg_path = None, default_cfg_path = None):
-        return Config(cfg_path, default_cfg_path)
-
+        cfg = Config(cfg_path, default_cfg_path)
+        return cfg
   
 def serialize(obj):
     if isinstance(obj, Config):

@@ -1,49 +1,74 @@
 import discord
-import traceback
 from discord.ext import commands
-    
+from modules.core import utils
+import time
+import subprocess
+import asyncio
+import sys
+import os
+
+import logging
+from logging.handlers import RotatingFileHandler
+
+#Create Log handler:
+log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
+logFile = os.path.dirname(os.path.realpath(__file__))+"/discord.log"
+my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=1*1000000, backupCount=10, encoding=None, delay=0)
+my_handler.setFormatter(log_formatter)
+my_handler.setLevel(logging.INFO)
+log = logging.getLogger("discord")
+log.setLevel(logging.INFO)
+log.addHandler(my_handler)
+
+
 # Make bot join server:
 # https://discordapp.com/oauth2/authorize?client_id=xxxxxx&scope=bot
 # API Reference
 #https://discordpy.readthedocs.io/en/rewrite/ext/commands/api.html#event-reference
 
-modules = ["errorhandle","core", "rcon"] #, "rcon_custom"
-bot = commands.Bot(command_prefix="!", pm_help=True)
- 
-def load_modules():
-    for extension in modules:
-        try:
-            bot.load_extension("modules."+extension+".module")
-        except (discord.ClientException, ModuleNotFoundError):
-            print('Failed to load extension: '+extension)
-            traceback.print_exc()
+#cfg = utils.CoreConfig.modules["modules/core"]["discord"]
+cfg = utils.CoreConfig.cfgDiscord
 
+intents = discord.Intents.default()
+intents.members = True  # Subscribe to the privileged members 
+
+bot = commands.Bot(command_prefix=cfg["BOT_PREFIX"], pm_help=True, intents=intents)
+bot.CoreConfig = utils.CoreConfig(bot)
+ 
 ###################################################################################################
 #####                                  Initialization                                          ####
 ###################################################################################################     
 
-
 @bot.event
 async def on_ready():
-
-    print('Logged in as')
-    print(bot.user.name)
-    print(bot.user.id)
+    print('Logged in as {} [{}]'.format(bot.user.name, bot.user.id))
+    print(bot.guilds)
     print('------------')
+    bot.CoreConfig.load_role_permissions()
 
-def main():
-    load_modules()
+async def main():
+    
+    utils.Modules.loadCogs(bot)
+    
+    try:
+        await bot.login(cfg["TOKEN"])
+        await bot.connect()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        sys.exit("Bot Terminated (KeyboardInterrupt)")
+    except (KeyError, discord.errors.LoginFailure):
+        print("")
+        input("Please configure the bot on the settings page. [ENTER to terminte the bot]\n")
 
-    #checking depencies 
-    if("Commandconfig" in bot.cogs.keys()):
-        cfg = bot.cogs["Commandconfig"].cfg
-    else: 
-        sys.exit("Module 'Commandconfig' not loaded, but required")
-    bot.run(cfg["TOKEN"])
-     
 
-     
 if __name__ == '__main__':
-    main() 
-
-            
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("[DiscordBot] Interrupted")
+        
+    if(hasattr(bot, "restarting") and bot.restarting == True):
+        print("Restarting")
+        
+        time.sleep(1)
+        subprocess.Popen("python" + " bot.py", shell=True) #TODO: Will not work on all system
